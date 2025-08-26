@@ -3,7 +3,7 @@ from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 import math
-
+import logging
 
 """
 This module allows for the utilization of a password list file to perform a dictionary attack against an encrypted
@@ -43,7 +43,7 @@ class SevenZipCracker:
             tries.value += 1
             attempt_num = tries.value
 
-            print(f"Attempt number {attempt_num} - {password.strip()}", flush=True)
+            logging.info(f"Attempt number {attempt_num} - {password.strip()}")
 
             try:
                 with py7zr.SevenZipFile(self.file_to_crack, mode='r', password=password.strip()) as zipfile:
@@ -55,6 +55,7 @@ class SevenZipCracker:
                             f"Time to crack: {elapsed} minutes\n"
                             f"Number of tries: {attempt_num}\n"
                             f"Password: {password.strip()}")
+            
             except Exception:
                 continue
         return False, None
@@ -77,17 +78,27 @@ class SevenZipCracker:
         batches = [(self.password_list[i:i + batch_size], i + 1, found_event, tries)
                    for i in range(0, len(self.password_list), batch_size)]
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(self.__attempt_batch, batch): batch for batch in batches}
-
-            for future in as_completed(futures):
-                success, message = future.result()
-                if success:
-                    print(message)
-                    executor.shutdown(cancel_futures=True)
-                    break
-
-        print(f"\nTotal attempts made: {tries.value}")
+        try:
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(self.__attempt_batch, batch): batch for batch in batches}
+    
+                for future in as_completed(futures):
+                    success, message = future.result()
+                    if success:
+                        logging.info(message)
+                        executor.shutdown(cancel_futures=True)
+                        break
+    
+            logging.info(f"\nTotal attempts made: {tries.value}")
+            
+        except py7zr.Bad7zFile as e:
+            logging.error(f'Invalid 7zip File: {e}')
+            
+        except py7zr.UnsupportedCompressionMethodError as e:
+            logging.error(f'Unsupported Compression Method: {e}')
+            
+        except py7zr.DecompressionError as e:
+            logging.error(f'Decompression error: {e}')
 
 
 
